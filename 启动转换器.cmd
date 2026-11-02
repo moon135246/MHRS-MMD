@@ -5,9 +5,9 @@ set "TASK_STARTED="
 set "TASK_OLD_PYTHON="
 set "TASK_CHECK_PYTHON="
 if not exist "%~dp0bootstrap.py" (
-  echo 缺少 bootstrap.py，请重新解压完整的 MMD转换器_1.0.2 文件夹。
+  echo 缺少 bootstrap.py，请重新解压完整的 MMD转换器_1.0.3 文件夹。
   echo.
-  echo bootstrap.py is missing. Extract the complete MMD converter 1.0.2 folder.
+  echo bootstrap.py is missing. Extract the complete MMD converter 1.0.3 folder.
   pause
   exit /b 11
 )

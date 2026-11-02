@@ -38,7 +38,7 @@ function P.poll(watch)
  if ok and type(v)=='table' and v.ready and v.version==3 and type(v.timestamp)=='number' and math.abs(os.time()-v.timestamp)<6 and type(v.index_revision)=='string' and v.index_revision~=P.revision then
   P.reload();return true
  end
- if P.pending and os.clock()>P.deadline then P.pending=nil;P.status='曲库组件未连接，请用 1.0.2 转换工具更新游戏组件。' end
+ if P.pending and os.clock()>P.deadline then P.pending=nil;P.status='曲库组件未连接，请用 1.0.3 转换工具更新游戏组件。' end
  return false
 end
 P.reload()

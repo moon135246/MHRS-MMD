@@ -1,7 +1,7 @@
--- MMD-Rise Player 1.0.2: readable assets, bounded frame storage, full master-off release.
+-- MMD-Rise Player 1.0.3: readable assets, bounded frame storage, full master-off release.
 -- Motion conventions are clip metadata; experimental controls are hidden.
 -- REFramework > Script Generated UI > MMD 播放器.
-log.info("[MMD-Rise Player] START 1.0.2 (Unicode assets and lifecycle memory)")
+log.info("[MMD-Rise Player] START 1.0.3 (Unicode assets and lifecycle memory)")
 local PACKAGES = require("MMDRise.Packages")
 local PATHS=require('MMDRise.Paths')
 local FRAMESTORE=require('MMDRise.FrameStore')
@@ -2202,7 +2202,7 @@ end
 pcall(re.on_draw_ui, function()
     local ok, err = pcall(function()
         if not imgui.tree_node("MMD 播放器###mmd_rise_player") then return end
-        imgui.text_colored("版本: 1.0.2 | 作者: moon", 0xFF808080)
+        imgui.text_colored("版本: 1.0.3 | 作者: moon", 0xFF808080)
         imgui.separator()
         local changed,value=imgui.checkbox("MMD 总开关###mmd_master",SESSION.enabled)
         if changed then SESSION.set_enabled(value) end
@@ -2346,7 +2346,7 @@ pcall(re.on_draw_ui, function()
         end
         if imgui.tree_node("状态###mmd_status") then
             imgui.text(string.format("帧 %.1f / %d · 写入 %d · 缺失 %d",S.t,count,S.written,S.missing))
-            imgui.text("播放器 1.0.2 · 音乐组件 "..tostring(AUDIO.status.version or "未连接"))
+            imgui.text("播放器 1.0.3 · 音乐组件 "..tostring(AUDIO.status.version or "未连接"))
             if PACKAGES.status~='' then imgui.text(PACKAGES.status) end
             if PATHS.status~='' then imgui.text(PATHS.status) end
             if SESSION.music_error then imgui.text("游戏音乐："..SESSION.music_error) end

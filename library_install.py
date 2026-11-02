@@ -13,7 +13,7 @@ def install_library(game):
     dest=game/'reframework/plugins';dest.mkdir(parents=True,exist_ok=True)
     for name in ('MMDRiseLibrary.dll','MMDRiseLibraryHost.exe'):
         src,dst=source/name,dest/name
-        if not src.is_file():raise ValueError('缺少曲库组件：'+name+'\n请重新解压完整的 1.0.2 转换器文件夹。\n\nMissing library component: '+name+'\nExtract the complete converter 1.0.2 folder.')
+        if not src.is_file():raise ValueError('缺少曲库组件：'+name+'\n请重新解压完整的 1.0.3 转换器文件夹。\n\nMissing library component: '+name+'\nExtract the complete converter 1.0.3 folder.')
         if dst.exists() and dst.read_bytes()==src.read_bytes():continue
         temp=dst.with_suffix(dst.suffix+'.importing');shutil.copy2(src,temp)
         try:temp.replace(dst)

@@ -31,7 +31,7 @@ def update_player(game):
     missing=[p.name for p in (source,camera_source,expression_source,session_source,hotkey_source,package_source,*extra) if not p.is_file()]
     if missing:
         names=', '.join(missing)
-        raise ValueError('缺少播放器组件：'+names+'\n请重新解压完整的 1.0.2 转换器文件夹。\n\nMissing player components: '+names+'\nExtract the complete converter 1.0.2 folder.')
+        raise ValueError('缺少播放器组件：'+names+'\n请重新解压完整的 1.0.3 转换器文件夹。\n\nMissing player components: '+names+'\nExtract the complete converter 1.0.3 folder.')
     changed=False
     backup=game/'reframework/data/MMDRise/import_backups';backup.mkdir(parents=True,exist_ok=True)
     for source,dest in [(p,game/'reframework/autorun/MMDRise'/p.name) for p in extra]+[(camera_source,game/'reframework/autorun/MMDRise/Camera.lua'),
@@ -52,7 +52,7 @@ def update_player(game):
 
 class App:
     def __init__(self, root):
-        self.root=root;root.title('崛起 MMD · 导入 VMD 1.0.2');root.geometry('860x780');root.minsize(800,760)
+        self.root=root;root.title('崛起 MMD · 导入 VMD 1.0.3');root.geometry('860x780');root.minsize(800,760)
         self.events=queue.Queue()
         self.motion=tk.StringVar();self.label=tk.StringVar();self.slug=tk.StringVar()
         self.pmx=tk.StringVar();self.output=tk.StringVar()

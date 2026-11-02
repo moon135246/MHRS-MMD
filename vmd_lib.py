@@ -73,12 +73,25 @@ class Vmd(object):
         # VMD 0001: 10B 模型名; 0002: 20B
         two = b"0002" in self.header[:30]
         mlen = 20 if two else 10
+        if n < off + mlen:
+            raise VmdError("VMD 文件头或模型名不完整")
         self.model = dec_name(buf[off:off + mlen]); off += mlen
         self.version = "0002" if two else "0001"
 
+        def read_count(section, optional=False):
+            nonlocal off
+            remaining = n - off
+            if optional and remaining == 0:
+                return 0  # 文件恰好在上一完整段落结束：后续空段可省略。
+            if remaining < 4:
+                raise VmdError("%s计数字段不完整：只剩 %d 字节" % (section, remaining))
+            count = struct.unpack_from("<I", buf, off)[0]
+            off += 4
+            return count
+
         # --- 骨骼 ---
         sec_start = off
-        cnt = struct.unpack_from("<I", buf, off)[0]; off += 4
+        cnt = read_count("骨骼")
         if cnt > 20_000_000:
             raise VmdError("骨骼帧数异常: %d（解析已经跑偏）" % cnt)
         need = cnt * BONE_FRAME_SIZE
@@ -97,7 +110,7 @@ class Vmd(object):
 
         # --- 表情 ---
         sec_start = off
-        cnt = struct.unpack_from("<I", buf, off)[0]; off += 4
+        cnt = read_count("表情", optional=True)
         if off + cnt * MORPH_FRAME_SIZE > n:
             raise VmdError("表情段落越界")
         for i in range(cnt):
@@ -110,7 +123,7 @@ class Vmd(object):
 
         # --- 相机 ---
         sec_start = off
-        cnt = struct.unpack_from("<I", buf, off)[0]; off += 4
+        cnt = read_count("相机", optional=True)
         if off + cnt * CAMERA_FRAME_SIZE > n:
             raise VmdError("相机段落越界")
         for i in range(cnt):
@@ -126,7 +139,7 @@ class Vmd(object):
 
         # --- 灯光 ---
         sec_start = off
-        cnt = struct.unpack_from("<I", buf, off)[0]; off += 4
+        cnt = read_count("灯光", optional=True)
         if off + cnt * LIGHT_FRAME_SIZE > n:
             raise VmdError("灯光段落越界")
         off += cnt * LIGHT_FRAME_SIZE
@@ -134,7 +147,7 @@ class Vmd(object):
 
         # --- 自阴影 ---
         sec_start = off
-        cnt = struct.unpack_from("<I", buf, off)[0]; off += 4
+        cnt = read_count("自阴影", optional=True)
         if off + cnt * SHADOW_FRAME_SIZE > n:
             raise VmdError("自阴影段落越界")
         off += cnt * SHADOW_FRAME_SIZE
@@ -143,7 +156,7 @@ class Vmd(object):
         # --- IK (0002) ---
         if two and off < n:
             sec_start = off
-            cnt = struct.unpack_from("<I", buf, off)[0]; off += 4
+            cnt = read_count("IK", optional=True)
             ok = True
             for i in range(cnt):
                 if off + 9 > n:
