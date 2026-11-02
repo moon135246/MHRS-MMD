@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "dream_place_baked_fk_review",
+  "label": "DREAM PLACE 原始FK／水平手臂",
+  "scope": "arm_rest_directions",
+  "confidence": "empirical_video_review",
+  "note": "双膝已有密集有效旋转；保留既有FK转换路线，不额外烘焙标准腿IK。参考视频约110秒对应原动作117.495秒。未完整求值PMX辅助骨。",
+  "corrections": {
+    "L_Forearm": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "L_Hand": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "L_UpperArm": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "R_Forearm": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "R_Hand": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "R_UpperArm": [
+      0,
+      0,
+      0,
+      1
+    ]
+  },
+  "vmd_sha256": "0496f666f70a48cf8ff6c55d51bdebfff51dc403b1191741abeb9e37efc67459"
+}

@@ -11,5 +11,6 @@
 
 `retarget_smile_arms.py 原始动画.json 输出动画.json --profile 配置.json` 可用于Rise单位绑定格式动画。也可直接使用 `--pmx 模型.pmx`；没有选项则使用标准T-pose。它的输入是中间动画JSON，不是VMD。
 
+已有 `bake_smile_rise.py` 会对当前VMD自动匹配配置。不要直接用它转换其他舞蹈：它的位移来源和部分骨链仍为当前舞蹈专用。
 
 目标bind/restw保持崛起单位阵；每骨方向纠正右乘到源世界旋转，并同步换算局部旋转，避免父子通道不一致。输出带来源和校准性质，拒绝重复转换。

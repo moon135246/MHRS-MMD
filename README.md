@@ -1,6 +1,6 @@
 # MHRS-MMD
 
-怪物猎人：崛起 MMD 转换器与播放器 · **1.0.0** · 作者 **moon**
+怪物猎人：崛起 MMD 转换器与播放器 · **1.0.2** · 作者 **moon**
 
 将 MMD VMD 动作转换为《怪物猎人：崛起》可播放的数据，支持身体、手指、音乐、透视镜头和形态键表情。
 MMD VMD converter and player for Monster Hunter Rise (Windows x64).
@@ -18,7 +18,7 @@ MMD VMD converter and player for Monster Hunter Rise (Windows x64).
 
 ## 版本
 
-本标签版本：**1.0.0**。首个正式版本：VMD 身体与手指转换、音乐、镜头、形态键表情及单曲 MOD 导出。
+本标签版本：**1.0.2**。按需确认腿部 IK 补算；中英双语环境提示；删除曲目不留回收备份，MOD 移除后同步曲库。
 
 [版本记录](CHANGELOG.md) · [提交记录](https://github.com/moon135246/MHRS-MMD/commits/main/)
 

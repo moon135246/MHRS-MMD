@@ -1,7 +1,7 @@
--- MMD-Rise Player 1.0.0: readable assets, bounded frame storage, full master-off release.
+-- MMD-Rise Player 1.0.2: readable assets, bounded frame storage, full master-off release.
 -- Motion conventions are clip metadata; experimental controls are hidden.
 -- REFramework > Script Generated UI > MMD 播放器.
-log.info("[MMD-Rise Player] START 1.0.0 (Unicode assets and lifecycle memory)")
+log.info("[MMD-Rise Player] START 1.0.2 (Unicode assets and lifecycle memory)")
 local PACKAGES = require("MMDRise.Packages")
 local PATHS=require('MMDRise.Paths')
 local FRAMESTORE=require('MMDRise.FrameStore')
@@ -1333,6 +1333,10 @@ function BINDING.invalidate(reason,preserve_stage)
     if was_ready then AUDIO.revision=AUDIO.revision+1;logmsg(BINDING.status) end
 end
 function BINDING.update(force)
+    -- Unicode resources may still be awaiting their native path index. Binding
+    -- an empty animation would put every main joint in RESET_LIST, which then
+    -- clears the real pose even after the motion loads on the same skeleton.
+    if anim==nil then return false end
     local go,owner,index=get_master_go()
     local xf
     if go then
@@ -2159,12 +2163,12 @@ local function library_tick()
     if not p then return end
     local now=os.clock()
     if not p.sent and now>=p.send_after then
-        local ok,status=pcall(json.load_file,"MMDRise/library2_status.json")
+        local ok,status=pcall(json.load_file,"MMDRise/library3_status.json")
         if not ok or type(status)~="table" or not status.ready or
-            type(status.timestamp)~="number" or math.abs(os.time()-status.timestamp)>6 then
+            status.version~=3 or type(status.timestamp)~="number" or math.abs(os.time()-status.timestamp)>6 then
             MANAGE.message="曲库组件尚未连接，请用新版导入工具安装组件。";MANAGE.pending=nil;return
         end
-        local wrote,value=pcall(json.dump_file,"MMDRise/library2_request.json",{id=p.id,action="delete",slug=p.slug})
+        local wrote,value=pcall(json.dump_file,"MMDRise/library3_request.json",{id=p.id,action="delete",slug=p.slug})
         if not wrote or value==false then
             MANAGE.message="无法写入删除请求，请重试。";MANAGE.pending=nil;return
         end
@@ -2172,23 +2176,33 @@ local function library_tick()
     end
     if now<MANAGE.next_poll then return end
     MANAGE.next_poll=now+0.15
-    local ok,status=pcall(json.load_file,"MMDRise/library2_status.json")
+        local ok,status=pcall(json.load_file,"MMDRise/library3_status.json")
     if ok and type(status)=="table" and status.id==p.id then
         MANAGE.pending=nil
         if status.ok then
             close_playback();refresh_library();audio_load_library();CAMERA.reload()
             anim=nil;S.clip="";SAMPLE={}
             if LIBRARY[1] then load_clip(LIBRARY[1].slug) end
-            MANAGE.message="已删除："..p.label.."\n文件保存在 MMDRise/deleted_tracks。"
+            MANAGE.message="已删除："..p.label
         else MANAGE.message="删除未完成："..tostring(status.error or "文件正在使用，请重试") end
     elseif now>p.deadline then
         MANAGE.pending=nil;MANAGE.message="等待删除结果超时，请刷新曲库核对。"
     end
 end
+local function refresh_assets(refresh)
+    refresh_library(refresh);audio_load_library();CAMERA.reload()
+    local present=false
+    for _,clip in ipairs(LIBRARY) do if clip.slug==S.clip then present=true;break end end
+    if not present and S.clip~="" then
+        close_playback();anim=nil;SAMPLE={};S.clip=""
+        if SESSION.enabled and LIBRARY[1] then load_clip(LIBRARY[1].slug) end
+    end
+    AUDIO.revision=AUDIO.revision+1;audio_tick(true)
+end
 pcall(re.on_draw_ui, function()
     local ok, err = pcall(function()
         if not imgui.tree_node("MMD 播放器###mmd_rise_player") then return end
-        imgui.text_colored("版本: 1.0.0 | 作者: moon", 0xFF808080)
+        imgui.text_colored("版本: 1.0.2 | 作者: moon", 0xFF808080)
         imgui.separator()
         local changed,value=imgui.checkbox("MMD 总开关###mmd_master",SESSION.enabled)
         if changed then SESSION.set_enabled(value) end
@@ -2208,7 +2222,7 @@ pcall(re.on_draw_ui, function()
             audio_tick(true)
         end
         if imgui.button("刷新曲库###mmd_refresh") and not MANAGE.pending then
-            MANAGE.confirm=nil;refresh_library();audio_load_library();CAMERA.reload();AUDIO.revision=AUDIO.revision+1;audio_tick(true)
+            MANAGE.confirm=nil;refresh_assets()
         end
         imgui.same_line()
         if imgui.button("删除曲目###mmd_delete") and clips[selected] and not MANAGE.pending then
@@ -2217,7 +2231,7 @@ pcall(re.on_draw_ui, function()
         if MANAGE.confirm then
             local c=MANAGE.confirm
             imgui.text("删除《"..c.label.."》？")
-            imgui.text("动作与独占音轨/镜头移入回收目录。\n其他曲目共用的资源会保留。")
+            imgui.text("删除动作与独占音轨/镜头，不保留备份。\n其他曲目共用的资源会保留。")
             if imgui.button("确认删除###mmd_delete_confirm") then request_delete(c.slug,c.label) end
             imgui.same_line()
             if imgui.button("取消###mmd_delete_cancel") then MANAGE.confirm=nil end
@@ -2332,7 +2346,7 @@ pcall(re.on_draw_ui, function()
         end
         if imgui.tree_node("状态###mmd_status") then
             imgui.text(string.format("帧 %.1f / %d · 写入 %d · 缺失 %d",S.t,count,S.written,S.missing))
-            imgui.text("播放器 1.0.0 · 音乐组件 "..tostring(AUDIO.status.version or "未连接"))
+            imgui.text("播放器 1.0.2 · 音乐组件 "..tostring(AUDIO.status.version or "未连接"))
             if PACKAGES.status~='' then imgui.text(PACKAGES.status) end
             if PATHS.status~='' then imgui.text(PATHS.status) end
             if SESSION.music_error then imgui.text("游戏音乐："..SESSION.music_error) end
@@ -2350,7 +2364,7 @@ end)
 -- ================================================================ 启动
 local started = false
 re.on_frame(function()
-    if PATHS.poll() then refresh_library(false);audio_load_library();CAMERA.reload() end
+    if PATHS.poll(SESSION.enabled) then refresh_assets(false) end
     if not SESSION.enabled then return end
     -- N1 修复（prior-art 审计）：包 pcall。on_frame 里的错误比 on_draw_ui 更难察觉，
     -- 用户只会看到"脚本没反应"。

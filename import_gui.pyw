@@ -8,7 +8,7 @@ import tempfile
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from convert_vmd import convert
+from convert_vmd import convert, IKConsentRequired
 from audio_assets import stage_music, install_music
 from audio_install import install_audio
 from camera_assets import stage_camera, install_cameras
@@ -28,8 +28,10 @@ def update_player(game):
     hotkey_source=HERE/'播放器/reframework/autorun/MMDRise/Hotkeys.lua'
     package_source=HERE/'播放器/reframework/autorun/MMDRise/Packages.lua'
     extra=[HERE/'播放器/reframework/autorun/MMDRise'/name for name in ('Paths.lua','FrameStore.lua')]
-    if not all(p.is_file() for p in (source,camera_source,expression_source,session_source,hotkey_source,package_source,*extra)):
-        raise ValueError('播放器组件不完整，请完整复制1.0.0版转换工具文件夹')
+    missing=[p.name for p in (source,camera_source,expression_source,session_source,hotkey_source,package_source,*extra) if not p.is_file()]
+    if missing:
+        names=', '.join(missing)
+        raise ValueError('缺少播放器组件：'+names+'\n请重新解压完整的 1.0.2 转换器文件夹。\n\nMissing player components: '+names+'\nExtract the complete converter 1.0.2 folder.')
     changed=False
     backup=game/'reframework/data/MMDRise/import_backups';backup.mkdir(parents=True,exist_ok=True)
     for source,dest in [(p,game/'reframework/autorun/MMDRise'/p.name) for p in extra]+[(camera_source,game/'reframework/autorun/MMDRise/Camera.lua'),
@@ -50,7 +52,7 @@ def update_player(game):
 
 class App:
     def __init__(self, root):
-        self.root=root;root.title('崛起 MMD · 导入 VMD 1.0.0');root.geometry('860x780');root.minsize(800,760)
+        self.root=root;root.title('崛起 MMD · 导入 VMD 1.0.2');root.geometry('860x780');root.minsize(800,760)
         self.events=queue.Queue()
         self.motion=tk.StringVar();self.label=tk.StringVar();self.slug=tk.StringVar()
         self.pmx=tk.StringVar();self.output=tk.StringVar()
@@ -79,7 +81,7 @@ class App:
         ttk.Button(box,text='默认',command=self.default_output).grid(row=7,column=3,padx=(5,0))
         ttk.Label(box,text='动作高度').grid(row=9,column=0,sticky='w',pady=6)
         ttk.Combobox(box,textvariable=self.height,state='readonly',values=['还原动作高度（推荐）','首帧高度归零（兼容旧版）']).grid(row=9,column=1,sticky='ew',padx=8)
-        ttk.Checkbutton(box,text='转换成功后导入所选游戏（自动更新播放器、音乐与曲库组件并备份）',variable=self.install).grid(row=10,columnspan=4,sticky='w',pady=10)
+        ttk.Checkbutton(box,text='转换成功后导入所选游戏（同时更新播放器与必要组件）',variable=self.install).grid(row=10,columnspan=4,sticky='w',pady=10)
         ttk.Label(box,text='按曲目名称创建“名称MMD_Dance”文件夹和 ZIP，里面已按游戏 MOD 目录排好。\n默认输出位置为动作所在目录的 MMD_Converted；可手选，点击“默认”可恢复。\n曲目名称同时用于所有资源文件名；安装说明放在 MOD 文件夹和 ZIP 旁边。\n表情留空读取动作内表情；选择独立文件则替代。需要 ShapeKeySystem 与支持的模型。',wraplength=790).grid(row=11,columnspan=4,sticky='w')
         self.button=ttk.Button(box,text='转换并导出 MOD 包',command=self.run);self.button.grid(row=12,columnspan=4,pady=15)
         self.status=tk.StringVar(value='选择“模型动作”文件；镜头、表情文件不能代替身体动作。')
@@ -131,13 +133,21 @@ class App:
             messagebox.showerror('曲目名称无效',str(exc));return
         if install and (not (Path(game)/'MonsterHunterRise.exe').is_file() or not (Path(game)/'reframework/autorun/DSH_MMDRise_Player.lua').is_file()):
             messagebox.showerror('游戏目录不完整','请选择包含 MonsterHunterRise.exe 且已安装本项目播放器的文件夹。');return
-        self.button.state(['disabled']);self.status.set('正在解析与转换，请稍候…')
+        self.button.state(['disabled']);self.status.set('正在检查动作，请稍候…')
         def worker():
             try:
                 player_updated=False
                 with tempfile.TemporaryDirectory(prefix='mhrs_vmd_') as temp:
                     staged=Path(temp)
-                    try: report=convert(motion,slug,staged,label or None,pmx or None,vertical_reference=vertical_reference,expression_path=expression or None)
+                    try:
+                        try:report=convert(motion,slug,staged,label or None,pmx or None,vertical_reference=vertical_reference,expression_path=expression or None)
+                        except IKConsentRequired as exc:
+                            answer=threading.Event();choice={}
+                            self.events.put(('ik_confirmation',str(exc),answer,choice))
+                            answer.wait()
+                            if not choice.get('accepted'):
+                                self.events.put(('cancelled','已取消 IK 补算，本次未转换或导入任何曲目。'));return
+                            report=convert(motion,slug,staged,label or None,pmx or None,vertical_reference=vertical_reference,expression_path=expression or None,allow_ik=True)
                     except ValueError:
                         # Preserve diagnostic reports even when IK prevents exporting.
                         if staged.exists():
@@ -171,8 +181,17 @@ class App:
 
     def poll(self):
         try:
-            ok,msg=self.events.get_nowait();self.button.state(['!disabled']);self.status.set(msg)
-            (messagebox.showinfo if ok else messagebox.showerror)('转换完成' if ok else '未完成转换',msg)
+            event=self.events.get_nowait();kind,msg=event[:2]
+            if kind=='ik_confirmation':
+                answer,choice=event[2:]
+                try:choice['accepted']=messagebox.askokcancel('需要腿部 IK 补算',msg,parent=self.root)
+                finally:answer.set()
+                self.status.set('正在进行 IK 补算与转换，请稍候…' if choice.get('accepted') else '正在取消…')
+            elif kind=='cancelled':
+                self.button.state(['!disabled']);self.status.set(msg)
+            else:
+                self.button.state(['!disabled']);self.status.set(msg)
+                (messagebox.showinfo if kind else messagebox.showerror)('转换完成' if kind else '未完成转换',msg)
         except queue.Empty:pass
         self.root.after(150,self.poll)
 

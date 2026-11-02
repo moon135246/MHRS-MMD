@@ -2,7 +2,7 @@
 local P={paths={},packages={},status='',serial=0}
 function P.reload()
  local ok,v=pcall(json.load_file,'MMDRise/paths.json')
- if ok and type(v)=='table' and v.version==1 then P.paths=v.paths or {};P.packages=v.packages or {} end
+ if ok and type(v)=='table' and v.version==1 then P.paths=v.paths or {};P.packages=v.packages or {};P.revision=v.revision end
 end
 function P.relative(name)
  if type(name)~='string' or name:find('[%z\\:]') or name:find('..',1,true) or name:sub(1,1)=='/' then return nil end
@@ -22,19 +22,23 @@ end
 function P.request()
  P.serial=P.serial+1;P.pending=tostring(os.time())..'_paths_'..math.floor(os.clock()*1000)..'_'..P.serial
  P.deadline=os.clock()+10;P.next_poll=0
- local ok,result=pcall(json.dump_file,'MMDRise/library2_request.json',{id=P.pending,action='index'})
+ local ok,result=pcall(json.dump_file,'MMDRise/library3_request.json',{id=P.pending,action='index'})
  if not ok or result==false then P.pending=nil;P.status='无法请求资源索引：'..tostring(result) end
 end
-function P.poll()
- if not P.pending or os.clock()<P.next_poll then return false end
- P.next_poll=os.clock()+.2
- local ok,v=pcall(json.load_file,'MMDRise/library2_status.json')
+function P.poll(watch)
+ if not P.pending and not watch then return false end
+ if os.clock()<(P.next_poll or 0) then return false end
+ P.next_poll=os.clock()+(P.pending and .2 or 2.)
+ local ok,v=pcall(json.load_file,'MMDRise/library3_status.json')
  if ok and type(v)=='table' and v.id==P.pending then
   P.pending=nil
   if v.ok then P.reload();P.status='';return true end
   P.status='中文资源索引失败：'..tostring(v.error);return false
  end
- if os.clock()>P.deadline then P.pending=nil;P.status='中文资源组件未连接，请用 1.0.0 转换工具更新游戏组件。' end
+ if ok and type(v)=='table' and v.ready and v.version==3 and type(v.timestamp)=='number' and math.abs(os.time()-v.timestamp)<6 and type(v.index_revision)=='string' and v.index_revision~=P.revision then
+  P.reload();return true
+ end
+ if P.pending and os.clock()>P.deadline then P.pending=nil;P.status='曲库组件未连接，请用 1.0.2 转换工具更新游戏组件。' end
  return false
 end
 P.reload()

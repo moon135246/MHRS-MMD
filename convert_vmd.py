@@ -2,7 +2,7 @@
 
 Supports sampled FK tracks, VMD Bezier position/Slerp rotation interpolation,
 independent upper/lower body branches, root translation and 30 finger tracks.
-Unbaked leg IK is detected and rejected rather than exported as straight legs.
+Standard unbaked leg IK is solved offline and exported as ordinary FK frames.
 """
 import argparse
 from bisect import bisect_right
@@ -20,8 +20,20 @@ from retarget_smile_arms import retarget, mul, inv, unit
 from arm_inference import infer_profile
 from motion_translation import PelvisMotion
 from expression_assets import expression_data, expression_report
+from leg_ik import LegIK, ik_may_be_enabled
 
 I = [0.,0.,0.,1.]
+IK_CONFIRMATION = ('此动作需要补算腿部 IK，才能得到可播放的腿部动作。\n\n'
+    'IK 补算只能尽量还原原始 FK 效果，无法保证完全一致；缺少配套 PMX 时还会使用近似骨架。\n'
+    '点击“确定”同意进行 IK 补算并继续转换；点击“取消”退出本次转换。')
+
+
+class IKConsentRequired(ValueError):
+    """No output is written until the caller explicitly allows IK baking."""
+    def __init__(self, report):
+        super().__init__(IK_CONFIRMATION)
+        self.report=report
+
 MAP = dict(Hip='Waist_00',spine_0='Spine_00',spine_1='Spine_01',
            Neck_0='Neck_00',Head='Head_00')
 PARENT = dict(Hip=None,spine_0='Hip',spine_1='spine_0',Neck_0='spine_1',Head='Neck_0')
@@ -115,7 +127,7 @@ def diagnose(vmd):
     for side in ['左','右']:
         ik=idx.get(side+'足ＩＫ',idx.get(side+'足IK',[]))
         span=max([max(k[1][i] for k in ik)-min(k[1][i] for k in ik) for i in range(3)] or [0]) if ik else 0
-        if span>.1 and angle_max(idx.get(side+'ひざ',[]))<1:
+        if span>.1 and angle_max(idx.get(side+'ひざ',[]))<1 and ik_may_be_enabled(vmd,side+'足ＩＫ'):
             need_ik.append(side+'足ＩＫ')
     if need_ik:warnings.append('腿部依赖尚未烘焙的IK：'+','.join(need_ik))
     handled={'全ての親','センター','グルーブ','腰','下半身','上半身','上半身2','首','頭'}
@@ -142,7 +154,7 @@ def finger_mapping():
     return result
 
 
-def convert(vmd_path,slug,output_dir,label=None,pmx=None,profile_path=None,scale=.08023,register=True,vertical_reference='rest',expression_path=None):
+def convert(vmd_path,slug,output_dir,label=None,pmx=None,profile_path=None,scale=.08023,register=True,vertical_reference='rest',expression_path=None,allow_ik=False):
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',slug):
         raise ValueError('曲目ID只能使用英文字母、数字、下划线和短横线')
     vmd_path,output_dir=Path(vmd_path),Path(output_dir)
@@ -162,11 +174,18 @@ def convert(vmd_path,slug,output_dir,label=None,pmx=None,profile_path=None,scale
     if count>36000:raise ValueError('动作超过20分钟，请先裁剪后转换')
     facial=expression_data(expression_path) if expression_path else expression_data(vmd_path,parsed=vmd,required=False)
     report=diagnose(vmd);report['source_file']=vmd_path.name;report['count']=count
+    if report['requires_ik_bake'] and not allow_ik:raise IKConsentRequired(report)
     output_dir.mkdir(parents=True,exist_ok=True)
-    if report['requires_ik_bake']:
-        (output_dir/f'dance_{slug}_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-        raise ValueError('已解析文件，但腿部需要IK烘焙。暂未导出会失真的直腿动作；诊断报告已保存。')
     tr=Tracks(vmd,count);frames=[];pelvis_motion=PelvisMotion(tr,pmx)
+    leg_solver=None
+    if report['requires_ik_bake']:
+        try:leg_solver=LegIK(tr,vmd,pmx)
+        except ValueError as exc:
+            report['ik_error']=str(exc)
+            (output_dir/f'dance_{slug}_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+            raise
+        report['warnings']=[w for w in report['warnings'] if not w.startswith('腿部依赖尚未烘焙的IK')]
+        if not pmx:report['warnings'].append('腿 IK 使用内置标准骨架近似（验证版）；VMD 不含腿长，请对照原视频复核膝盖和落脚，配套 PMX 可提供实测骨架。')
     for f in range(count):
         g=I
         for name in ['全ての親','センター','グルーブ','腰']:
@@ -184,11 +203,18 @@ def convert(vmd_path,slug,output_dir,label=None,pmx=None,profile_path=None,scale
             prev=w['Hip']
             for part,jp in [('Thigh','足'),('Shin','ひざ'),('Foot','足首'),('Toe','つま先')]:
                 prev=mul(prev,tr.q(prefix+jp,f));w[side+'_'+part]=prev
+        if leg_solver:w.update(leg_solver.solve(f))
         frame={'pos':[round(x,7) for x in pelvis_motion.at(f)]}
         for bone in MAP:
             parent=PARENT[bone]
             frame[bone]=dict(w=unit(w[bone]),r=unit(mul(inv(w[parent]),w[bone]) if parent else w[bone]))
         frames.append(frame)
+    if leg_solver:
+        report['ik_baked']=True
+        report['leg_ik']=leg_solver.stats
+        report['leg_ik']['mean_ankle_error']=leg_solver.stats['ankle_error_sum']/max(1,leg_solver.stats['ankle_samples'])
+        if leg_solver.stats['max_ankle_error']>.1:
+            report['warnings'].append('部分帧脚 IK 目标未完全到达；可能超出腿长或受关节限制，请核对配套模型及落脚。')
     # A measured PMX bind pose does not supersede an exact-motion calibration:
     # the supplied model may differ from the rig on which the VMD was authored.
     known_profile=choose_profile(vmd_path)
@@ -217,6 +243,7 @@ def convert(vmd_path,slug,output_dir,label=None,pmx=None,profile_path=None,scale
         arm_width=0.,elbow_pitch=0.,converter='mhrs_vmd_1',
         source_sha256=hashlib.sha256(vmd_path.read_bytes()).hexdigest())
     data=retarget(data,profile=profile)
+    if leg_solver:data['leg_ik_bake']=report['leg_ik']
     if facial:data['morphs']=facial
     data['wref']={b:data['frames'][0][b]['w'] for b in MAP}
     fingers=[];fm=finger_mapping()
@@ -239,6 +266,7 @@ def convert(vmd_path,slug,output_dir,label=None,pmx=None,profile_path=None,scale
     if facial and facial['end']>=count:
         report['warnings'].append('表情尾部超过身体动作；只播放身体动作时间范围内的表情。')
     report['supported']='FK body/arms/legs, root, fingers, sparse VMD morphs via ShapeKeySystem; camera imported separately'
+    if leg_solver:report['supported']+='; standard offline leg/toe IK (preview)'
     for name,obj in [(f'dance_{slug}.json',data),(f'dance_{slug}_fingers.json',fingers),(f'dance_{slug}_report.json',report)]:
         (output_dir/name).write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
     if register:
@@ -259,8 +287,9 @@ def main():
     parser.add_argument('--scale',type=float,default=.08023)
     parser.add_argument('--height-reference',choices=['rest','first_frame'],default='rest')
     parser.add_argument('--expression',type=Path,help='可选：独立表情VMD，替代动作文件内的表情')
+    parser.add_argument('--allow-ik',action='store_true',help='明确同意对需要补算的动作进行腿部 IK 补算；结果不能保证与原始 FK 完全一致')
     args=parser.parse_args()
-    report=convert(args.vmd,args.slug,args.output,args.name,args.pmx,args.profile,args.scale,vertical_reference=args.height_reference,expression_path=args.expression)
+    report=convert(args.vmd,args.slug,args.output,args.name,args.pmx,args.profile,args.scale,vertical_reference=args.height_reference,expression_path=args.expression,allow_ik=args.allow_ik)
     print(json.dumps({k:report[k] for k in ['count','duration_seconds','warnings']},ensure_ascii=False))
 
 

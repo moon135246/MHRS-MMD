@@ -15,7 +15,7 @@ def install_audio(game):
     for name in ('MMDRiseAudio.dll', 'MMDRiseAudioHost.exe'):
         src, dst = source / name, dest / name
         if not src.is_file():
-            raise ValueError('缺少音乐组件，请完整复制 1.0.0 版导入工具文件夹。')
+            raise ValueError('缺少音乐组件：'+name+'\n请重新解压完整的 1.0.2 转换器文件夹。\n\nMissing audio component: '+name+'\nExtract the complete converter 1.0.2 folder.')
         if dst.exists() and hashlib.sha256(src.read_bytes()).digest() == hashlib.sha256(dst.read_bytes()).digest():
             continue
         temporary = dst.with_suffix(dst.suffix + '.importing')
