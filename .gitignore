@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+**/build/
+*.obj
+*.lib
+*.exp
+*.pdb
+*.bak
+*.tmp
+MMD_Converted/
